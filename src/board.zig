@@ -1,4 +1,5 @@
 const std = @import("std");
+const print = std.debug.print;
 
 pub const Piece = enum {
     pawn,
@@ -24,6 +25,10 @@ pub const Board = struct {
 
         pub fn new(x: i32, y: i32) Offset {
             return .{ .x = x, .y = y };
+        }
+
+        pub fn scale(self: *const Offset, s: i32) Offset {
+            return Offset.new(self.x * s, self.y * s);
         }
     };
 
@@ -55,7 +60,7 @@ pub const Board = struct {
             const new_row = r + move.x;
             const new_col = c + move.y;
 
-            if (new_row < 0 or new_col < 0 or new_row > Board.width or new_row > Board.height) {
+            if (new_row < 0 or new_col < 0 or new_row >= Board.width or new_col >= Board.height) {
                 return null;
             }
 
@@ -71,7 +76,7 @@ pub const Board = struct {
 
     highlighted: []i32, // should be []bool, opengl doesn't like that though
 
-    position_lookup: std.AutoHashMap(Position, usize),
+    position_lookup: std.AutoHashMap(usize, usize),
     selected_piece_id: ?usize,
 
     const Self = @This();
@@ -111,6 +116,7 @@ pub const Board = struct {
             return;
         }
 
+        // TODO: rewrite this, maybe put into new function
         switch (piece) {
             .pawn => {
                 const move = if (colour == .white) Offset.new(0, 1) else Offset.new(0, -1);
@@ -125,11 +131,83 @@ pub const Board = struct {
                 }
             },
             .knight => {
-                const moves: [4]Offset = .{
+                const moves: [8]Offset = .{
                     Offset.new(2, 1),
                     Offset.new(-2, 1),
                     Offset.new(1, 2),
                     Offset.new(-1, 2),
+
+                    Offset.new(2, -1),
+                    Offset.new(1, -2),
+                    Offset.new(1, -2),
+                    Offset.new(-1, -2),
+                };
+                for (moves) |move| {
+                    if (self.validMove(id, move)) {
+                        self.highlightTile(pos.moveBy(move).?.toIndex());
+                    }
+                }
+            },
+            .bishop => {
+                // :D
+                const mold: [4]Offset = .{
+                    Offset.new(1, 1),
+                    Offset.new(-1, 1),
+                    Offset.new(-1, -1),
+                    Offset.new(1, -1),
+                };
+                var mask: [4]bool = .{ false, false, false, false };
+                // TODO: make this work
+                var em: [4]bool = .{ false, false, false, false };
+                for (0..7) |d| {
+                    for (0..4) |r| {
+                        if (mask[r] == false or em[r] == false) {
+                            const move = mold[r].scale(@intCast(d + 1));
+                            if (self.validMove(id, move)) {
+                                const index = pos.moveBy(move).?.toIndex();
+                                if (self.hasPieceAt(index)) {
+                                    em[r] = true;
+                                }
+                                self.highlightTile(index);
+                            } else {
+                                mask[r] = true;
+                            }
+                        }
+                    }
+                }
+            },
+            .rook => {
+                const mold: [4]Offset = .{
+                    Offset.new(0, 1),
+                    Offset.new(-1, 0),
+                    Offset.new(0, -1),
+                    Offset.new(1, 0),
+                };
+                var mask: [4]bool = .{ false, false, false, false };
+                for (0..7) |d| {
+                    for (0..4) |r| {
+                        if (mask[r] == false) {
+                            const move = mold[r].scale(@intCast(d + 1));
+                            if (self.validMove(id, move)) {
+                                self.highlightTile(pos.moveBy(move).?.toIndex());
+                            } else {
+                                mask[r] = true;
+                            }
+                        }
+                    }
+                }
+            },
+            .king => {
+                const moves: [8]Offset = .{
+                    Offset.new(1, 0),
+                    Offset.new(-1, 0),
+                    Offset.new(0, 1),
+                    Offset.new(0, -1),
+
+                    Offset.new(1, 1),
+                    Offset.new(-1, 1),
+                    Offset.new(-1, -1),
+                    Offset.new(1, -1),
                 };
                 for (moves) |move| {
                     if (self.validMove(id, move)) {
@@ -143,31 +221,29 @@ pub const Board = struct {
 
     fn addPiece(self: *Self, colour: Colour, row: usize, col: usize, piece: Piece) !void {
         const pos = Position{ .row = row, .column = col };
+        const index = pos.toIndex();
         const id = self.entryCount();
         try self.pieces.append(piece);
         try self.positions.append(pos);
         try self.colours.append(colour);
         try self.alive.append(true);
         try self.has_moved.append(false);
-        try self.position_lookup.put(pos, id);
-    }
-
-    pub fn deletePiece(self: *Self, id: usize) void {
-        if (id < self.entryCount()) {
-            self.alive.items[id] = false;
-            const pos = self.positions.items[id];
-            _ = self.position_lookup.remove(pos);
-        }
+        try self.position_lookup.put(index, id);
     }
 
     pub fn movePiece(self: *Self, old_pos: Position, target_index: usize) void {
         const new_pos = Position.fromIndex(target_index);
-        const maybeId = self.position_lookup.get(old_pos);
+        // due to how `validMove` is written, this can only be an enemy piece
+        if (self.getPieceIdAt(new_pos.toIndex())) |captured_piece_id| {
+            self.alive.items[captured_piece_id] = false;
+        }
+        const maybeId = self.position_lookup.get(old_pos.toIndex());
         if (maybeId) |id| {
+            print("moving piece with id {d} from {any} to {any}\n", .{ id, old_pos, new_pos });
             self.has_moved.items[id] = true;
             self.positions.items[id] = new_pos;
-            _ = self.position_lookup.remove(old_pos);
-            self.position_lookup.put(new_pos, id) catch unreachable;
+            _ = self.position_lookup.remove(old_pos.toIndex());
+            self.position_lookup.put(new_pos.toIndex(), id) catch unreachable;
         }
         self.unselectPiece();
         self.clearHighlightedTiles();
@@ -197,11 +273,11 @@ pub const Board = struct {
     }
 
     pub inline fn getPieceIdAt(self: *const Self, index: usize) ?usize {
-        return self.position_lookup.get(Position{ .row = index % Self.width, .column = index / Self.width });
+        return self.position_lookup.get(index);
     }
 
     pub inline fn hasPieceAt(self: *const Self, index: usize) bool {
-        return self.position_lookup.contains(Position{ .row = index % Self.width, .column = index / Self.width });
+        return self.position_lookup.contains(index);
     }
 
     pub inline fn entryCount(self: *const Self) usize {
@@ -223,7 +299,7 @@ pub const Board = struct {
             .colours = std.ArrayList(Colour).init(allocator),
             .alive = std.ArrayList(bool).init(allocator),
             .has_moved = std.ArrayList(bool).init(allocator),
-            .position_lookup = std.AutoHashMap(Position, usize).init(allocator),
+            .position_lookup = std.AutoHashMap(usize, usize).init(allocator),
             .highlighted = highlightMask,
             .selected_piece_id = null,
         };
