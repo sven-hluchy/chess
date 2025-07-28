@@ -10,27 +10,95 @@ pub const Piece = enum {
     king,
 };
 
+pub const Colour = enum {
+    black,
+    white,
+};
+
+const Offset = struct {
+    x: i32,
+    y: i32,
+
+    pub fn new(x: i32, y: i32) Offset {
+        return .{ .x = x, .y = y };
+    }
+
+    pub fn scale(self: *const Offset, s: i32) Offset {
+        return Offset.new(self.x * s, self.y * s);
+    }
+};
+
+const pawn_moves_white_not_yet_moved = [_]Offset{
+    Offset.new(0, 1),
+    Offset.new(0, 2),
+};
+
+const pawn_moves_white = [_]Offset{
+    Offset.new(0, 1),
+};
+
+const pawn_moves_black_not_yet_moved = [_]Offset{
+    Offset.new(0, -1),
+    Offset.new(0, -2),
+};
+
+const pawn_moves_black = [_]Offset{
+    Offset.new(0, -1),
+};
+
+const knight_moves = [_]Offset{
+    Offset.new(2, 1),
+    Offset.new(-2, 1),
+    Offset.new(1, 2),
+    Offset.new(-1, 2),
+
+    Offset.new(2, -1),
+    Offset.new(1, -2),
+    Offset.new(1, -2),
+    Offset.new(-1, -2),
+};
+
+const bishop_mold = [_]Offset{
+    Offset.new(1, 1),
+    Offset.new(-1, 1),
+    Offset.new(-1, -1),
+    Offset.new(1, -1),
+};
+
+const rook_mold = [_]Offset{
+    Offset.new(0, 1),
+    Offset.new(-1, 0),
+    Offset.new(0, -1),
+    Offset.new(1, 0),
+};
+
+const queen_mold = [_]Offset{
+    Offset.new(1, 0),
+    Offset.new(-1, 0),
+    Offset.new(0, 1),
+    Offset.new(0, -1),
+
+    Offset.new(1, 1),
+    Offset.new(-1, 1),
+    Offset.new(-1, -1),
+    Offset.new(1, -1),
+};
+
+const king_moves = [_]Offset{
+    Offset.new(1, 0),
+    Offset.new(-1, 0),
+    Offset.new(0, 1),
+    Offset.new(0, -1),
+
+    Offset.new(1, 1),
+    Offset.new(-1, 1),
+    Offset.new(-1, -1),
+    Offset.new(1, -1),
+};
+
 pub const Board = struct {
     pub const width: usize = 8;
     pub const height: usize = 8;
-
-    const Colour = enum {
-        black,
-        white,
-    };
-
-    const Offset = struct {
-        x: i32,
-        y: i32,
-
-        pub fn new(x: i32, y: i32) Offset {
-            return .{ .x = x, .y = y };
-        }
-
-        pub fn scale(self: *const Offset, s: i32) Offset {
-            return Offset.new(self.x * s, self.y * s);
-        }
-    };
 
     const Position = struct {
         row: usize,
@@ -105,63 +173,54 @@ pub const Board = struct {
         return false;
     }
 
+    pub fn getPossibleMoves(self: *Self, id: usize) []const Offset {
+        const piece = self.pieces.items[id];
+        const colour = self.colours.items[id];
+        const has_moved = self.has_moved.items[id];
+
+        switch (piece) {
+            .pawn => {
+                if (colour == .white) {
+                    return if (has_moved) &pawn_moves_white else &pawn_moves_white_not_yet_moved;
+                } else {
+                    return if (has_moved) &pawn_moves_black else &pawn_moves_black_not_yet_moved;
+                }
+            },
+            .knight => { return &knight_moves; },
+            .bishop => { return &bishop_mold; },
+            .rook => { return &rook_mold; },
+            .queen => { return &queen_mold; },
+            .king => { return &king_moves; },
+        }
+    }
+
     pub fn highlightMoves(self: *Self, id: usize) void {
         const piece = self.pieces.items[id];
         const pos = self.positions.items[id];
-        const colour = self.colours.items[id];
-        const has_moved = self.has_moved.items[id];
         const alive = self.alive.items[id];
 
         if (alive == false) { // the dead don't move
             return;
         }
 
-        // TODO: rewrite this, maybe put into new function
         switch (piece) {
-            .pawn => {
-                const move = if (colour == .white) Offset.new(0, 1) else Offset.new(0, -1);
-                if (self.validMove(id, move)) {
-                    self.highlightTile(pos.moveBy(move).?.toIndex());
-                }
-                if (has_moved == false) {
-                    const move2 = if (colour == .white) Offset.new(0, 2) else Offset.new(0, -2);
-                    if (self.validMove(id, move2)) {
-                        self.highlightTile(pos.moveBy(move2).?.toIndex());
-                    }
-                }
-            },
-            .knight => {
-                const moves: [8]Offset = .{
-                    Offset.new(2, 1),
-                    Offset.new(-2, 1),
-                    Offset.new(1, 2),
-                    Offset.new(-1, 2),
-
-                    Offset.new(2, -1),
-                    Offset.new(1, -2),
-                    Offset.new(1, -2),
-                    Offset.new(-1, -2),
-                };
+            .pawn, .king, .knight => {
+                const moves = self.getPossibleMoves(id);
+                print("has {d} possible moves: {any}\n", .{ moves.len, moves });
                 for (moves) |move| {
                     if (self.validMove(id, move)) {
                         self.highlightTile(pos.moveBy(move).?.toIndex());
                     }
                 }
             },
-            .bishop => {
+            .bishop, .queen, .rook => {
                 // :D
-                const mold: [4]Offset = .{
-                    Offset.new(1, 1),
-                    Offset.new(-1, 1),
-                    Offset.new(-1, -1),
-                    Offset.new(1, -1),
-                };
-                var mask: [4]bool = .{ false, false, false, false };
-                // TODO: make this work
-                var em: [4]bool = .{ false, false, false, false };
+                const mold = self.getPossibleMoves(id);
+                var mask: [8]bool = .{ false } ** 8;
+                var em: [8]bool = .{ false } ** 8;
                 for (0..7) |d| {
                     for (0..4) |r| {
-                        if (mask[r] == false or em[r] == false) {
+                        if (mask[r] == false and em[r] == false) {
                             const move = mold[r].scale(@intCast(d + 1));
                             if (self.validMove(id, move)) {
                                 const index = pos.moveBy(move).?.toIndex();
@@ -176,46 +235,6 @@ pub const Board = struct {
                     }
                 }
             },
-            .rook => {
-                const mold: [4]Offset = .{
-                    Offset.new(0, 1),
-                    Offset.new(-1, 0),
-                    Offset.new(0, -1),
-                    Offset.new(1, 0),
-                };
-                var mask: [4]bool = .{ false, false, false, false };
-                for (0..7) |d| {
-                    for (0..4) |r| {
-                        if (mask[r] == false) {
-                            const move = mold[r].scale(@intCast(d + 1));
-                            if (self.validMove(id, move)) {
-                                self.highlightTile(pos.moveBy(move).?.toIndex());
-                            } else {
-                                mask[r] = true;
-                            }
-                        }
-                    }
-                }
-            },
-            .king => {
-                const moves: [8]Offset = .{
-                    Offset.new(1, 0),
-                    Offset.new(-1, 0),
-                    Offset.new(0, 1),
-                    Offset.new(0, -1),
-
-                    Offset.new(1, 1),
-                    Offset.new(-1, 1),
-                    Offset.new(-1, -1),
-                    Offset.new(1, -1),
-                };
-                for (moves) |move| {
-                    if (self.validMove(id, move)) {
-                        self.highlightTile(pos.moveBy(move).?.toIndex());
-                    }
-                }
-            },
-            else => {},
         }
     }
 
