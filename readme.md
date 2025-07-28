@@ -1,13 +1,11 @@
 # Chess
 
-<p align="center>
-    <b>3D Chess in Zig using SDL3 + OpenGL</b>
-</p>
+<b align="center">3D Chess in Zig using SDL3 + OpenGL</b>
 
 <br>
 
-<p align="center>
-    <img src="https://github.com/user-attachments/assets/30c4e158-d293-49c2-83b0-c48d3dece096" width=300 height=300 alt="Preview Image"></img>
+<p align="center">
+    <img src="https://github.com/user-attachments/assets/30c4e158-d293-49c2-83b0-c48d3dece096" width=300 height=300 alt="Preview Image" />
 </p>
 
 <br>
