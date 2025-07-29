@@ -45,9 +45,19 @@ fn vec3Colour(red: u8, green: u8, blue: u8) Vec3 {
     return Vec3.new(r / 255.0, g / 255.0, b / 255.0);
 }
 
-const white_colour = vec3Colour(235, 217, 179);
-const black_colour = vec3Colour(129, 84, 56);
+// const white_colour = vec3Colour(235, 217, 179);
+// const black_colour = vec3Colour(129, 84, 56);
 const selection_colour = vec3Colour(19, 196, 163);
+
+// const white_colour_ambient = Vec3.new(0.1, 0.4, 0.35);
+// const white_colour_diffuse = Vec3.new(0.95, 0.95, 0.85);
+// const white_colour_specular = Vec3.new(0.3, 0.3, 0.3);
+// const white_colour_shininess = 30.0;
+// 
+// const black_colour_ambient = Vec3.new(0.2, 0.4, 0.2);
+// const black_colour_diffuse = Vec3.new(0.0, 0.5, 0.25);
+// const black_colour_specular = Vec3.new(0.3, 0.8, 0.6);
+// const black_colour_shininess = 76.8;
 
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) == false) {
@@ -93,7 +103,7 @@ pub fn main() !void {
 
     const shadow_program = try assets.loadProgram("res/shadow_vertex.glsl", "res/shadow_fragment.glsl");
 
-    const light_pos = Vec3.new(5.0, 8.0, 3.0);
+    const light_pos = Vec3.new(0.0, 6.0, -1.0);
     const light_ortho = za.orthographic(-10, 10, -10, 10, 1, 20.0);
     const light_view_matrix = za.lookAt(light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
 
@@ -149,8 +159,18 @@ pub fn main() !void {
 
     program.use();
     setUniform3f(program, "uLightPos", light_pos);
-    setUniform3f(program, "whiteColour", white_colour);
-    setUniform3f(program, "blackColour", black_colour);
+    
+    // set directly in shader
+    // setUniform3f(program, "whiteAmbient", white_colour_ambient);
+    // setUniform3f(program, "whiteDiffuse", white_colour_diffuse);
+    // setUniform3f(program, "whiteSpecular", white_colour_specular);
+    // setUniform1f(program, "whiteShininess", white_colour_shininess);
+
+    // setUniform3f(program, "blackAmbient", black_colour_ambient);
+    // setUniform3f(program, "blackDiffuse", black_colour_diffuse);
+    // setUniform3f(program, "blackSpecular", black_colour_specular);
+    // setUniform1f(program, "blackShininess", black_colour_shininess);
+
     setUniform3f(program, "selectionColour", selection_colour);
     setUniform3f(program, "uLightPos", light_pos);
 
@@ -310,7 +330,7 @@ fn renderPieces(board: *Board, mesh_data: *assets.MeshData, program: gl.Program)
 
         program.use();
         var model_matrix = Mat4.fromTranslate(Vec3.new(x - 3.5, 0, z - 3.5));
-        setUniform3f(program, "objectColour", if (colour == .white) white_colour else black_colour);
+        setUniform1f(program, "white", if (colour == .white) 1.0 else 0.0);
         if (colour == .white) {
             model_matrix = model_matrix.rotate(180, Vec3.new(0, 1, 0));
         }
