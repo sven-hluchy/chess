@@ -112,8 +112,6 @@ pub const InputEventBuffer = struct {
                         } else if (board.getPieceIdAt(index)) |id| {
                             board.clearHighlightedTiles();
 
-                            print("clicked on piece with id = {d}\n", .{ id });
-
                             board.selectPiece(id);
                             board.highlightTile(index);
                             board.highlightMoves(id);

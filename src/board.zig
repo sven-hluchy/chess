@@ -8,6 +8,17 @@ pub const Piece = enum {
     rook,
     queen,
     king,
+
+    pub fn toString(self: Piece) []const u8 {
+        return switch (self) {
+            .pawn => "pawn",
+            .bishop => "bishop",
+            .knight => "knight",
+            .rook => "rook",
+            .queen => "queen",
+            .king => "king",
+        };
+    }
 };
 
 const Colour = enum {
@@ -127,6 +138,10 @@ pub const Board = struct {
             return self.column * Board.width + self.row;
         }
 
+        pub fn eq(self: *const Position, other: Position) bool {
+            return self.row == other.row and self.column == other.column;
+        }
+
         // should handle the whole i32-usize casting shit with _some_ grace
         // if the target tile is not a valid usize, the move is not valid
         pub fn moveBy(self: *const Position, move: Offset) ?Position {
@@ -159,21 +174,38 @@ pub const Board = struct {
 
     const Self = @This();
 
+    fn pawnMoveDistance(self: *const Self, id: usize) usize {
+        const pawn_pos = self.positions.items[id];
+        const pawn_colour = self.colours.items[id];
+        const has_pawn_moved = self.has_moved.items[id];
+
+        const n: usize = if (has_pawn_moved == false) 2 else 1;
+        const s: i32 = if (pawn_colour == .white) 1 else -1;
+        for (0..n) |index| {
+            const maybePos = pawn_pos.moveBy(Offset.new(0, @as(i32, @intCast(index + 1)) * s));
+            if (maybePos) |pos| {
+                if (self.hasPieceAt(pos.toIndex())) {
+                    return index;
+                }
+            }
+        }
+        return n;
+    }
+
     fn canPawnCapture(self: *const Self, id: usize) enum { no, left, right, both } {
         const pawn_pos = self.positions.items[id];
         const colour = self.colours.items[id];
 
         const capture_moves_white = [_]Offset{
-            Offset.new(-1, 1), // left 
-            Offset.new(1, 1), // right
+            Offset.new(1, 1),
+            Offset.new(-1, 1),
         };
 
         const capture_moves_black = [_]Offset{
-            Offset.new(-1, -1), // left
-            Offset.new(1, -1), // right
+            Offset.new(-1, -1),
+            Offset.new(1, -1),
         };
 
-        // left, right
         var can_capture: u8 = 0;
 
         const moves = if (colour == .white) capture_moves_white else capture_moves_black;
@@ -226,20 +258,20 @@ pub const Board = struct {
 
     pub fn getPossibleMoves(self: *Self, id: usize) []const Offset {
         const piece = self.pieces.items[id];
-        const has_moved = self.has_moved.items[id];
 
         switch (piece) {
             .pawn => {
-                if (has_moved == false) {
-                    return &pawn_moves_not_yet_moved;
-                } else {
-                    return switch (self.canPawnCapture(id)) {
-                        .left => &pawn_moves_capture_left,
-                        .right => &pawn_moves_capture_right,
-                        .both => &pawn_moves_capture_both,
-                        .no => &pawn_moves,
-                    };
-                }
+                return switch (self.canPawnCapture(id)) {
+                    .left => &pawn_moves_capture_left,
+                    .right => &pawn_moves_capture_right,
+                    .both => &pawn_moves_capture_both,
+                    .no => switch (self.pawnMoveDistance(id)) {
+                        0 => &.{},
+                        1 => &pawn_moves,
+                        2 => &pawn_moves_not_yet_moved,
+                        else => unreachable,
+                    },
+                };
             },
             .knight => { return &knight_moves; },
             .bishop => { return &bishop_mold; },
@@ -276,10 +308,11 @@ pub const Board = struct {
             .bishop, .queen, .rook => {
                 // :D
                 const mold = self.getPossibleMoves(id);
+                // const n = if (piece == .queen) 8 else 4;
                 var mask: [8]bool = .{ false } ** 8;
                 var em: [8]bool = .{ false } ** 8;
                 for (0..7) |d| {
-                    for (0..4) |r| {
+                    for (0..if (piece == .queen) 8 else 4) |r| {
                         if (mask[r] == false and em[r] == false) {
                             const move = mold[r].scale(@intCast(d + 1));
                             if (self.validMove(id, move)) {
@@ -312,6 +345,11 @@ pub const Board = struct {
 
     pub fn movePiece(self: *Self, old_pos: Position, target_index: usize) void {
         const new_pos = Position.fromIndex(target_index);
+        if (new_pos.eq(old_pos)) {
+            self.unselectPiece();
+            self.clearHighlightedTiles();
+            return;
+        }
         // due to how `validMove` is written, this can only be an enemy piece (or the piece itself)
         const maybeId = self.position_lookup.get(old_pos.toIndex());
         if (maybeId) |id| {
@@ -328,6 +366,8 @@ pub const Board = struct {
 
                 self.turn_number += 1;
                 self.turn = if (self.turn == .white) .black else .white;
+
+                print("`{s}` moved, `{s}` to play\n", .{ self.pieces.items[id].toString(), if (self.turn == .white) "white" else "black" });
             }
         }
         self.unselectPiece();

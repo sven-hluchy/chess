@@ -107,7 +107,7 @@ pub fn main() !void {
     // TODO: add shadows
     // const light_view_matrix = za.lookAt(light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
 
-    var view_matrix = za.lookAt(Vec3.new(0, 10, -8), Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
+    var view_matrix = za.lookAt(Vec3.new(0, 8, -8), Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
 
     program.use();
 
