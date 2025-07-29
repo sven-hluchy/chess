@@ -59,8 +59,8 @@ pub fn main() !void {
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLEBUFFERS, 1);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLESAMPLES, 8);
 
-    const white_colour = vec3Colour(239, 230, 221);
-    const black_colour = vec3Colour(223, 29, 54);
+    const white_colour = vec3Colour(235, 217, 179);
+    const black_colour = vec3Colour(90, 58, 34);
     const selection_colour = vec3Colour(19, 196, 163);
 
     const window = c.SDL_CreateWindow("title", 800, 600, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE);
@@ -104,6 +104,7 @@ pub fn main() !void {
     var input_events = event.InputEventBuffer.init(allocator);
 
     const light_pos = Vec3.new(5.0, 5.0, 0.0);
+    // TODO: add shadows
     // const light_view_matrix = za.lookAt(light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
 
     var view_matrix = za.lookAt(Vec3.new(0, 10, -8), Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
@@ -202,6 +203,7 @@ pub fn main() !void {
             }
 
             gl.uniform1iv(program.uniformLocation("highlighted"), board.highlighted);
+            setUniform1i(program, "renderingTiles", 1);
 
             const tile_vao = mesh_data.getVao(.tile);
             const tile_vertex_count = mesh_data.getCount(.tile);
@@ -212,6 +214,8 @@ pub fn main() !void {
 
             gl.bindVertexArray(tile_vao);
             gl.drawArraysInstanced(.triangles, 0, tile_vertex_count, Board.width * Board.height);
+
+            setUniform1i(program, "renderingTiles", 0);
 
             _ = c.SDL_GL_SwapWindow(window);
 

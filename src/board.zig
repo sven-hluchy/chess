@@ -10,7 +10,7 @@ pub const Piece = enum {
     king,
 };
 
-pub const Colour = enum {
+const Colour = enum {
     black,
     white,
 };
@@ -146,11 +146,17 @@ pub const Board = struct {
 
     position_lookup: std.AutoHashMap(usize, usize),
     selected_piece_id: ?usize,
+    turn_number: usize,
+    turn: Colour,
 
     const Self = @This();
 
     fn validMove(self: *Self, id: usize, move: Offset) bool {
         // if there is a piece that has a different colour or if there is no piece
+        if (move.x == 0 and move.y == 0) {
+            return false;
+        }
+
         const current_pos = self.positions.items[id];
         const new_pos = current_pos.moveBy(move);
         if (new_pos == null) {
@@ -165,7 +171,7 @@ pub const Board = struct {
         const colour = self.colours.items[id];
         if (self.getPieceIdAt(index)) |piece_id| {
             const piece_colour = self.colours.items[piece_id];
-            if (colour != piece_colour) {
+            if (colour != piece_colour and piece_id != id) {
                 return true;
             }
         }
@@ -206,7 +212,6 @@ pub const Board = struct {
         switch (piece) {
             .pawn, .king, .knight => {
                 const moves = self.getPossibleMoves(id);
-                print("has {d} possible moves: {any}\n", .{ moves.len, moves });
                 for (moves) |move| {
                     if (self.validMove(id, move)) {
                         self.highlightTile(pos.moveBy(move).?.toIndex());
@@ -252,17 +257,23 @@ pub const Board = struct {
 
     pub fn movePiece(self: *Self, old_pos: Position, target_index: usize) void {
         const new_pos = Position.fromIndex(target_index);
-        // due to how `validMove` is written, this can only be an enemy piece
-        if (self.getPieceIdAt(new_pos.toIndex())) |captured_piece_id| {
-            self.alive.items[captured_piece_id] = false;
-        }
+        // due to how `validMove` is written, this can only be an enemy piece (or the piece itself)
         const maybeId = self.position_lookup.get(old_pos.toIndex());
         if (maybeId) |id| {
-            print("moving piece with id {d} from {any} to {any}\n", .{ id, old_pos, new_pos });
-            self.has_moved.items[id] = true;
-            self.positions.items[id] = new_pos;
-            _ = self.position_lookup.remove(old_pos.toIndex());
-            self.position_lookup.put(new_pos.toIndex(), id) catch unreachable;
+            if (self.colours.items[id] == self.turn) {
+                if (self.getPieceIdAt(new_pos.toIndex())) |captured_piece_id| {
+                    if (id != captured_piece_id) {
+                        self.alive.items[captured_piece_id] = false;
+                    }
+                }
+                self.has_moved.items[id] = true;
+                self.positions.items[id] = new_pos;
+                _ = self.position_lookup.remove(old_pos.toIndex());
+                self.position_lookup.put(new_pos.toIndex(), id) catch unreachable;
+
+                self.turn_number += 1;
+                self.turn = if (self.turn == .white) .black else .white;
+            }
         }
         self.unselectPiece();
         self.clearHighlightedTiles();
@@ -321,6 +332,8 @@ pub const Board = struct {
             .position_lookup = std.AutoHashMap(usize, usize).init(allocator),
             .highlighted = highlightMask,
             .selected_piece_id = null,
+            .turn_number = 1,
+            .turn = .white,
         };
 
         try board.addPiece(.white, 0, 0, .rook);
