@@ -60,7 +60,7 @@ pub fn main() !void {
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLESAMPLES, 8);
 
     const white_colour = vec3Colour(235, 217, 179);
-    const black_colour = vec3Colour(90, 58, 34);
+    const black_colour = vec3Colour(129, 84, 56);
     const selection_colour = vec3Colour(19, 196, 163);
 
     const window = c.SDL_CreateWindow("title", 800, 600, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE);
