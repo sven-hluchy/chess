@@ -124,7 +124,6 @@ pub const InputEventBuffer = struct {
         for (self.window_resized.items) |window| {
             self.window_width = window.width;
             self.window_height = window.height;
-            gl.viewport(0, 0, window.width, window.height);
         }
 
         for (self.key_down.items) |key| {

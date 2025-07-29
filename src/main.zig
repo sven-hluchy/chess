@@ -45,6 +45,10 @@ fn vec3Colour(red: u8, green: u8, blue: u8) Vec3 {
     return Vec3.new(r / 255.0, g / 255.0, b / 255.0);
 }
 
+const white_colour = vec3Colour(235, 217, 179);
+const black_colour = vec3Colour(129, 84, 56);
+const selection_colour = vec3Colour(19, 196, 163);
+
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) == false) {
         print("[Error] SDL_Init: {s}\n", .{c.SDL_GetError()});
@@ -59,9 +63,6 @@ pub fn main() !void {
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLEBUFFERS, 1);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLESAMPLES, 8);
 
-    const white_colour = vec3Colour(235, 217, 179);
-    const black_colour = vec3Colour(129, 84, 56);
-    const selection_colour = vec3Colour(19, 196, 163);
 
     const window = c.SDL_CreateWindow("title", 800, 600, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE);
     if (window == null) {
@@ -90,8 +91,46 @@ pub fn main() !void {
     gl.enable(.multisample);
     gl.cullFace(.back);
 
+    const shadow_program = try assets.loadProgram("res/shadow_vertex.glsl", "res/shadow_fragment.glsl");
+
+    const light_pos = Vec3.new(5.0, 8.0, 3.0);
+    const light_ortho = za.orthographic(-10, 10, -10, 10, 1, 20.0);
+    const light_view_matrix = za.lookAt(light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
+
+    shadow_program.use();
+    setUniformMat4f(shadow_program, "projection", light_ortho);
+    setUniformMat4f(shadow_program, "view", light_view_matrix);
+
+    var shadow_fbo = gl.Framebuffer.create();
+    defer shadow_fbo.delete();
+
+    const shadow_width = 1024;
+    const shadow_height = 1024;
+    var depth_tex = gl.Texture.create(.@"2d");
+    defer depth_tex.delete();
+    depth_tex.bind(.@"2d");
+    gl.textureImage2D(.@"2d", 0, .depth_component, shadow_width, shadow_height, .depth_component, .float, null);
+    depth_tex.parameter(.min_filter, .linear);
+    depth_tex.parameter(.mag_filter, .linear);
+    depth_tex.parameter(.wrap_s, .clamp_to_border);
+    depth_tex.parameter(.wrap_t, .clamp_to_border);
+
+    gl.bindFramebuffer(shadow_fbo, .buffer);
+    gl.framebufferTexture2D(shadow_fbo, .buffer, .depth, .@"2d", depth_tex, 0);
+    gl.drawBuffer(.none);
+    gl.readBuffer(.none);
+    gl.bindFramebuffer(.invalid, .buffer);
+
+    if (gl.checkFramebufferStatus(.buffer) != .complete) {
+        print(":(\n", .{});
+    }
+
     var board = try Board.init(allocator);
     var program = try assets.loadProgram("res/phong_vertex.glsl", "res/phong_fragment.glsl");
+    var debug = try assets.loadProgram("res/debug_vs.glsl", "res/debug_fs.glsl");
+
+    setUniformMat4f(program, "lightProjMatrix", light_ortho);
+    setUniformMat4f(program, "lightViewMatrix", light_view_matrix);
 
     try mesh_data.add(.pawn, "res/pawn.obj");
     try mesh_data.add(.knight, "res/knight.obj");
@@ -103,20 +142,23 @@ pub fn main() !void {
 
     var input_events = event.InputEventBuffer.init(allocator);
 
-    const light_pos = Vec3.new(5.0, 5.0, 0.0);
-    // TODO: add shadows
-    // const light_view_matrix = za.lookAt(light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
-
     var view_matrix = za.lookAt(Vec3.new(0, 8, -8), Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
 
-    program.use();
+    debug.use();
+    setUniform1i(debug, "depthMap", 0);
 
+    program.use();
     setUniform3f(program, "uLightPos", light_pos);
     setUniform3f(program, "whiteColour", white_colour);
     setUniform3f(program, "blackColour", black_colour);
     setUniform3f(program, "selectionColour", selection_colour);
+    setUniform3f(program, "uLightPos", light_pos);
 
     setUniformMat4f(program, "viewMatrix", view_matrix);
+    setUniform1i(program, "shadowMap", 0);
+
+    const quadVao = getQuadVao();
+    print("{any}\n", .{ quadVao });
 
     {
         loop: while (true) {
@@ -169,52 +211,50 @@ pub fn main() !void {
             input_events.update(&view_matrix, &projection_matrix, &board);
             setUniformMat4f(program, "viewMatrix", view_matrix);
 
-            gl.clearColor(0.3, 0.3, 0.4, 1.0);
-            gl.clear(.{ .color = true, .depth = true});
-
-            for (0..board.entryCount()) |index| {
-                if (board.isAlive(index) == false) { // not very DoD :(
-                    continue;
-                }
-                const pos = board.positions.items[index];
-                const piece = board.pieces.items[index];
-                const colour = board.colours.items[index];
-
-                const asset_id = assets.AssetId.fromPiece(piece);
-                const piece_vao = mesh_data.getVao(asset_id);
-                const piece_vertex_count = mesh_data.getCount(asset_id);
-
-                const x = @as(f32, @floatFromInt(pos.row)) - 3.5;
-                const z = @as(f32, @floatFromInt(pos.column)) - 3.5;
-
-                var model_matrix = Mat4.fromTranslate(Vec3.new(x, 0, z));
-                if (colour == .black) {
-                    setUniform3f(program, "objectColour", black_colour);
-                } else if (colour == .white) {
-                    setUniform3f(program, "objectColour", white_colour);
-                    model_matrix = model_matrix.rotate(180, Vec3.new(0, 1, 0));
-                }
-                setUniformMat4f(program, "modelMatrix", model_matrix);
-
-                program.use();
-
-                gl.bindVertexArray(piece_vao);
-                gl.drawArrays(.triangles, 0, piece_vertex_count);
-            }
-
             gl.uniform1iv(program.uniformLocation("highlighted"), board.highlighted);
-            setUniform1i(program, "renderingTiles", 1);
-
+            const model_matrix = Mat4.fromTranslate(Vec3.new(-3.5, 0, -3.5));
             const tile_vao = mesh_data.getVao(.tile);
             const tile_vertex_count = mesh_data.getCount(.tile);
+            
+            // render into shadow map
+            gl.bindFramebuffer(shadow_fbo, .buffer);
 
-            const model_matrix = Mat4.fromTranslate(Vec3.new(-3.5, 0, -3.5));
-            setUniformMat4f(program, "modelMatrix", model_matrix);
-            setUniform3f(program, "objectColour", white_colour);
+            gl.viewport(0, 0, shadow_width, shadow_height);
+            gl.clear(.{ .depth = true });
+            gl.cullFace(.front);
+            shadow_program.use();
+            renderPieces(&board, &mesh_data, shadow_program);
 
+            setUniformMat4f(shadow_program, "modelMatrix", model_matrix);
             gl.bindVertexArray(tile_vao);
             gl.drawArraysInstanced(.triangles, 0, tile_vertex_count, Board.width * Board.height);
 
+            gl.bindFramebuffer(.invalid, .buffer);
+
+            // debug render
+            // gl.viewport(0, 0, input_events.window_width, input_events.window_height);
+            // gl.clear(.{ .color = true, .depth = true});
+            // debug.use();
+            // gl.activeTexture(.texture_0);
+            // gl.bindTexture(depth_tex, .@"2d");
+            // renderQuad(quadVao);
+
+            // render normal scene
+            gl.viewport(0, 0, input_events.window_width, input_events.window_height);
+            gl.cullFace(.back);
+            gl.clearColor(0.3, 0.3, 0.4, 1.0);
+            gl.clear(.{ .color = true, .depth = true});
+
+            gl.activeTexture(.texture_0);
+            gl.bindTexture(depth_tex, .@"2d");
+            program.use();
+            renderPieces(&board, &mesh_data, program);
+
+            setUniformMat4f(program, "modelMatrix", model_matrix);
+
+            setUniform1i(program, "renderingTiles", 1);
+            gl.bindVertexArray(tile_vao);
+            gl.drawArraysInstanced(.triangles, 0, tile_vertex_count, Board.width * Board.height);
             setUniform1i(program, "renderingTiles", 0);
 
             _ = c.SDL_GL_SwapWindow(window);
@@ -222,5 +262,62 @@ pub fn main() !void {
             input_events.clear();
             _ = c.SDL_Delay(16);
         }
+    }
+}
+
+fn getQuadVao() gl.VertexArray {
+    const v = [_]f32{
+        -1.0, 1.0, 0.0, 0.0, 1.0,
+        -1.0, -1.0, 0.0, 0.0, 0.0,
+        1.0, 1.0, 0.0, 1.0, 1.0,
+        1.0, -1.0, 0.0, 1.0, 0.0
+    };
+    const vao = gl.VertexArray.create();
+    vao.bind();
+
+    const vbo = gl.Buffer.create();
+    vbo.bind(.array_buffer);
+    vbo.data(f32, &v, .static_draw);
+    vao.enableVertexAttribute(0);
+    gl.vertexAttribPointer(0, 3, .float, false, 5 * @sizeOf(f32), 0);
+    vao.enableVertexAttribute(1);
+    gl.vertexAttribPointer(1, 2, .float, false, 5 * @sizeOf(f32), 3 * @sizeOf(f32));
+    return vao;
+}
+
+fn renderQuad(vao: gl.VertexArray) void {
+    gl.bindVertexArray(vao);
+    gl.drawArrays(.triangle_strip, 0, 4);
+    gl.bindVertexArray(.invalid);
+}
+
+fn renderPieces(board: *Board, mesh_data: *assets.MeshData, program: gl.Program) void {
+    for (0..board.entryCount()) |index| {
+        if (board.isAlive(index) == false) { // not very DoD :(
+            continue;
+        }
+
+        const piece = board.pieces.items[index];
+        const pos = board.positions.items[index];
+        const colour = board.colours.items[index];
+
+        const asset_id = assets.AssetId.fromPiece(piece);
+        const piece_vao = mesh_data.getVao(asset_id);
+        const piece_vertex_count = mesh_data.getCount(asset_id);
+
+        const x: f32 = @floatFromInt(pos.row);
+        const z: f32 = @floatFromInt(pos.column);
+
+        program.use();
+        var model_matrix = Mat4.fromTranslate(Vec3.new(x - 3.5, 0, z - 3.5));
+        setUniform3f(program, "objectColour", if (colour == .white) white_colour else black_colour);
+        if (colour == .white) {
+            model_matrix = model_matrix.rotate(180, Vec3.new(0, 1, 0));
+        }
+
+        setUniformMat4f(program, "modelMatrix", model_matrix);
+
+        gl.bindVertexArray(piece_vao);
+        gl.drawArrays(.triangles, 0, piece_vertex_count);
     }
 }

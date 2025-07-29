@@ -120,7 +120,7 @@ pub fn loadShader(path: []const u8, shaderType: gl.ShaderType) !gl.Shader {
 
     if (shader.get(.compile_status) == 0) {
         const compileLog = shader.getCompileLog(std.heap.page_allocator);
-        std.log.err("Error while compiling shader: {!s}\n", .{compileLog});
+        std.log.err("Error while compiling shader `{s}`: {!s}\n", .{path, compileLog});
         return error.shaderCompileError;
     }
 
