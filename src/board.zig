@@ -28,22 +28,30 @@ const Offset = struct {
     }
 };
 
-const pawn_moves_white_not_yet_moved = [_]Offset{
+const pawn_moves_not_yet_moved = [_]Offset{
     Offset.new(0, 1),
     Offset.new(0, 2),
 };
 
-const pawn_moves_white = [_]Offset{
+const pawn_moves = [_]Offset{
     Offset.new(0, 1),
 };
 
-const pawn_moves_black_not_yet_moved = [_]Offset{
-    Offset.new(0, -1),
-    Offset.new(0, -2),
+const pawn_moves_capture_left = [_]Offset{
+    Offset.new(0, 1),
+    Offset.new(1, 1),
 };
 
-const pawn_moves_black = [_]Offset{
-    Offset.new(0, -1),
+const pawn_moves_capture_right = [_]Offset{
+    Offset.new(0, 1),
+    Offset.new(-1, 1),
+};
+
+const pawn_moves_capture_both = [_]Offset{
+    Offset.new(0, 1),
+    Offset.new(1, 1),
+    Offset.new(0, 1),
+    Offset.new(-1, 1),
 };
 
 const knight_moves = [_]Offset{
@@ -151,6 +159,43 @@ pub const Board = struct {
 
     const Self = @This();
 
+    fn canPawnCapture(self: *const Self, id: usize) enum { no, left, right, both } {
+        const pawn_pos = self.positions.items[id];
+        const colour = self.colours.items[id];
+
+        const capture_moves_white = [_]Offset{
+            Offset.new(-1, 1), // left 
+            Offset.new(1, 1), // right
+        };
+
+        const capture_moves_black = [_]Offset{
+            Offset.new(-1, -1), // left
+            Offset.new(1, -1), // right
+        };
+
+        // left, right
+        var can_capture: u8 = 0;
+
+        const moves = if (colour == .white) capture_moves_white else capture_moves_black;
+        for (0.., moves) |index, move| {
+            const maybePos = pawn_pos.moveBy(move);
+            if (maybePos) |pos| {
+                if (self.getPieceIdAt(pos.toIndex())) |other_id| {
+                    if (self.colours.items[other_id] != colour) {
+                        can_capture |= @intCast(index + 1);
+                    }
+                }
+            }
+        }
+
+        return switch (can_capture) {
+            0b01 => .left,
+            0b10 => .right,
+            0b11 => .both,
+            else => .no,
+        };
+    }
+
     fn validMove(self: *Self, id: usize, move: Offset) bool {
         // if there is a piece that has a different colour or if there is no piece
         if (move.x == 0 and move.y == 0) {
@@ -181,15 +226,19 @@ pub const Board = struct {
 
     pub fn getPossibleMoves(self: *Self, id: usize) []const Offset {
         const piece = self.pieces.items[id];
-        const colour = self.colours.items[id];
         const has_moved = self.has_moved.items[id];
 
         switch (piece) {
             .pawn => {
-                if (colour == .white) {
-                    return if (has_moved) &pawn_moves_white else &pawn_moves_white_not_yet_moved;
+                if (has_moved == false) {
+                    return &pawn_moves_not_yet_moved;
                 } else {
-                    return if (has_moved) &pawn_moves_black else &pawn_moves_black_not_yet_moved;
+                    return switch (self.canPawnCapture(id)) {
+                        .left => &pawn_moves_capture_left,
+                        .right => &pawn_moves_capture_right,
+                        .both => &pawn_moves_capture_both,
+                        .no => &pawn_moves,
+                    };
                 }
             },
             .knight => { return &knight_moves; },
@@ -203,6 +252,7 @@ pub const Board = struct {
     pub fn highlightMoves(self: *Self, id: usize) void {
         const piece = self.pieces.items[id];
         const pos = self.positions.items[id];
+        const colour = self.colours.items[id];
         const alive = self.alive.items[id];
 
         if (alive == false) { // the dead don't move
@@ -213,8 +263,13 @@ pub const Board = struct {
             .pawn, .king, .knight => {
                 const moves = self.getPossibleMoves(id);
                 for (moves) |move| {
-                    if (self.validMove(id, move)) {
-                        self.highlightTile(pos.moveBy(move).?.toIndex());
+                    var m = move;
+                    if (piece == .pawn and colour == .black) {
+                        m = m.scale(-1);
+                    }
+                    if (self.validMove(id, m)) {
+                        const index = pos.moveBy(m).?.toIndex();
+                        self.highlightTile(index);
                     }
                 }
             },
