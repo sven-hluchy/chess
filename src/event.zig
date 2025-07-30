@@ -109,13 +109,19 @@ pub const InputEventBuffer = struct {
                             // should never fail because there can only be highlighted tiles when there is a piece selected
                             const id = board.selected_piece_id.?;
                             const old_pos = board.positions.items[id];
+                            if (board.pieces.items[id] == .king) {
+                                if (board.isCastling(index)) {
+                                    board.castle(id, index);
+                                }
+                            }
                             board.movePiece(old_pos, index);
                         } else if (board.getPieceIdAt(index)) |id| {
+                            const colour = board.colours.items[id];
                             board.clearHighlightedTiles();
-
-                            board.selectPiece(id);
-                            board.highlightTile(index);
-                            board.highlightMoves(id);
+                            if (colour == board.turn) {
+                                board.selectPiece(id);
+                                board.highlightMoves(id);
+                            }
                         }
                     }
                 }
@@ -134,11 +140,12 @@ pub const InputEventBuffer = struct {
         for (self.mouse_motion.items) |motion| {
             if (self.mouse_button_state[0] == .down) {
                 const max_pitch = za.toRadians(@as(f32, 80.0));
+                const min_pitch = za.toRadians(@as(f32, -5.0));
                 const sens = za.toRadians(@as(f32, 0.1));
                 const od = &camera_orientation.data;
 
                 od[1] -= motion.xrel * sens;
-                od[2] = util.clampf(od[2] + motion.yrel * sens, -max_pitch, max_pitch);
+                od[2] = util.clampf(od[2] + motion.yrel * sens, min_pitch, max_pitch);
 
                 view_matrix.* = util.rebuildViewMatrix(camera_orientation.*);
             }

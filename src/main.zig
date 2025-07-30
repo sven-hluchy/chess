@@ -227,7 +227,10 @@ pub fn main() !void {
             input_events.update(&view_matrix, &projection_matrix, &board, &camera_orientation);
             setUniformMat4f(program, "viewMatrix", view_matrix);
 
-            gl.uniform1iv(program.uniformLocation("highlighted"), board.highlighted);
+            //gl.uniform1iv( board.highlighted);
+
+            gl.uniform2ui(program.uniformLocation("highlighted"), @intCast(board.highlighted & 0xffff_ffff), @intCast(board.highlighted >> 32));
+
             const model_matrix = Mat4.fromTranslate(Vec3.new(-3.5, 0, -3.5));
             const tile_vao = mesh_data.getVao(.tile);
             const tile_vertex_count = mesh_data.getCount(.tile);

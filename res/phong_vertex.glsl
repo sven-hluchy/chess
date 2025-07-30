@@ -10,7 +10,7 @@ uniform mat4 lightProjMatrix;
 uniform float white;
 uniform vec3 selectionColour;
 
-uniform int highlighted[64];
+uniform uvec2 highlighted;
 
 uniform int renderingTiles;
 
@@ -20,7 +20,7 @@ in vec3 aNorm;
 out vec3 pos;
 out vec3 normal;
 
-out float highlight;
+out float isHighlighted;
 out float isWhite;
 
 out vec4 posLightSpace;
@@ -50,12 +50,13 @@ void main() {
             ? 1.0
             : 0.0;
 
-    highlight = highlighted[gl_InstanceID] == 1 && renderingTiles == 1 ? 0.5 : 0.0;
+    isHighlighted = renderingTiles == 1 && gl_InstanceID < 32
+        ? (highlighted.x >> uint(gl_InstanceID)) & 1u
+        : (highlighted.y >> uint(gl_InstanceID -32)) & 1u;
 
     posLightSpace = renderingTiles == 0
         ? lightProjMatrix * lightViewMatrix * modelMatrix * vec4(aPos, 1.0)
         : lightProjMatrix * lightViewMatrix * modelMatrix * offsetMatrix * vec4(aPos, 1.0);
-
 
     gl_Position = projectionMatrix * vec4(pos, 1.0);
 }

@@ -26,6 +26,8 @@ const Colour = enum {
     white,
 };
 
+const MoveMask = u64;
+
 const Offset = struct {
     x: i32,
     y: i32,
@@ -39,125 +41,54 @@ const Offset = struct {
     }
 };
 
-const pawn_moves_not_yet_moved = [_]Offset{
-    Offset.new(0, 1),
-    Offset.new(0, 2),
-};
+inline fn absSub(a: usize, b: usize) usize {
+    return if (a > b) a - b else b - a;
+}
 
-const pawn_moves = [_]Offset{
-    Offset.new(0, 1),
-};
+const Position = struct {
+    row: usize,
+    column: usize,
 
-const pawn_moves_capture_left = [_]Offset{
-    Offset.new(0, 1),
-    Offset.new(1, 1),
-};
+    pub fn new(x: usize, y: usize) Position {
+        return .{
+            .row = x,
+            .column = y,
+        };
+    }
 
-const pawn_moves_capture_right = [_]Offset{
-    Offset.new(0, 1),
-    Offset.new(-1, 1),
-};
+    pub fn fromIndex(index: usize) Position {
+        return Position.new(index % Board.width, index / Board.width);
+    }
 
-const pawn_moves_capture_both = [_]Offset{
-    Offset.new(0, 1),
-    Offset.new(1, 1),
-    Offset.new(0, 1),
-    Offset.new(-1, 1),
-};
+    pub fn toIndex(self: *const Position) usize {
+        return self.column * Board.width + self.row;
+    }
 
-const knight_moves = [_]Offset{
-    Offset.new(2, 1),
-    Offset.new(-2, 1),
-    Offset.new(1, 2),
-    Offset.new(-1, 2),
+    pub fn eq(self: *const Position, other: Position) bool {
+        return self.row == other.row and self.column == other.column;
+    }
 
-    Offset.new(2, -1),
-    Offset.new(1, -2),
-    Offset.new(1, -2),
-    Offset.new(-1, -2),
-};
+    // just uncheckd `isValidOffset`
+    pub fn offsetBy(self: *const Position, dx: i32, dy: i32) usize {
+        const new_row = @as(i32, @intCast(self.row)) + dx;
+        const new_col = @as(i32, @intCast(self.column)) + dy;
+        return Position.new(@intCast(new_row), @intCast(new_col)).toIndex();
+    }
 
-const bishop_mold = [_]Offset{
-    Offset.new(1, 1),
-    Offset.new(-1, 1),
-    Offset.new(-1, -1),
-    Offset.new(1, -1),
-};
+    pub fn isValidOffset(self: *const Position, dx: i32, dy: i32) ?usize {
+        const new_row = @as(i32, @intCast(self.row)) + dx;
+        const new_col = @as(i32, @intCast(self.column)) + dy;
 
-const rook_mold = [_]Offset{
-    Offset.new(0, 1),
-    Offset.new(-1, 0),
-    Offset.new(0, -1),
-    Offset.new(1, 0),
-};
-
-const queen_mold = [_]Offset{
-    Offset.new(1, 0),
-    Offset.new(-1, 0),
-    Offset.new(0, 1),
-    Offset.new(0, -1),
-
-    Offset.new(1, 1),
-    Offset.new(-1, 1),
-    Offset.new(-1, -1),
-    Offset.new(1, -1),
-};
-
-const king_moves = [_]Offset{
-    Offset.new(1, 0),
-    Offset.new(-1, 0),
-    Offset.new(0, 1),
-    Offset.new(0, -1),
-
-    Offset.new(1, 1),
-    Offset.new(-1, 1),
-    Offset.new(-1, -1),
-    Offset.new(1, -1),
+        if (new_row < 0 or new_col < 0 or new_row >= Board.width or new_col >= Board.height) {
+            return null;
+        }
+        return Position.new(@intCast(new_row), @intCast(new_col)).toIndex();
+    }
 };
 
 pub const Board = struct {
     pub const width: usize = 8;
     pub const height: usize = 8;
-
-    const Position = struct {
-        row: usize,
-        column: usize,
-
-        pub fn new(x: usize, y: usize) Position {
-            return .{
-                .row = x,
-                .column = y,
-            };
-        }
-
-        pub fn fromIndex(index: usize) Position {
-            return Position.new(index % Board.width, index / Board.width);
-        }
-
-        pub fn toIndex(self: *const Position) usize {
-            return self.column * Board.width + self.row;
-        }
-
-        pub fn eq(self: *const Position, other: Position) bool {
-            return self.row == other.row and self.column == other.column;
-        }
-
-        // should handle the whole i32-usize casting shit with _some_ grace
-        // if the target tile is not a valid usize, the move is not valid
-        pub fn moveBy(self: *const Position, move: Offset) ?Position {
-            const r: i32 = @intCast(self.row);
-            const c: i32 = @intCast(self.column);
-
-            const new_row = r + move.x;
-            const new_col = c + move.y;
-
-            if (new_row < 0 or new_col < 0 or new_row >= Board.width or new_col >= Board.height) {
-                return null;
-            }
-
-            return Position.new(@intCast(new_row), @intCast(new_col));
-        }
-    };
 
     pieces: std.ArrayList(Piece),
     positions: std.ArrayList(Position),
@@ -165,7 +96,8 @@ pub const Board = struct {
     alive: std.ArrayList(bool),
     has_moved: std.ArrayList(bool),
 
-    highlighted: []i32, // should be []bool, opengl doesn't like that though
+    highlighted: u64,
+    castling: u64,
 
     position_lookup: std.AutoHashMap(usize, usize),
     selected_piece_id: ?usize,
@@ -174,161 +106,266 @@ pub const Board = struct {
 
     const Self = @This();
 
-    fn pawnMoveDistance(self: *const Self, id: usize) usize {
-        const pawn_pos = self.positions.items[id];
-        const pawn_colour = self.colours.items[id];
-        const has_pawn_moved = self.has_moved.items[id];
-
-        const n: usize = if (has_pawn_moved == false) 2 else 1;
-        const s: i32 = if (pawn_colour == .white) 1 else -1;
-        for (0..n) |index| {
-            const maybePos = pawn_pos.moveBy(Offset.new(0, @as(i32, @intCast(index + 1)) * s));
-            if (maybePos) |pos| {
-                if (self.hasPieceAt(pos.toIndex())) {
-                    return index;
-                }
-            }
-        }
-        return n;
+    inline fn setNth(index: usize) u64 {
+        return @as(u64, 1) << @intCast(index);
     }
 
-    fn canPawnCapture(self: *const Self, id: usize) enum { no, left, right, both } {
-        const pawn_pos = self.positions.items[id];
+    fn isOccupied(self: *const Self, index: usize, colour: Colour) enum { no, enemy, friend } {
+        if (self.getPieceIdAt(index)) |id| {
+            if (colour != self.colours.items[id]) {
+                return .enemy;
+            } else {
+                return .friend;
+            }
+        }
+        return .no;
+    }
+    
+    fn getPawnMoves(self: *const Self, id: usize) MoveMask {
+        const pos = self.positions.items[id];
         const colour = self.colours.items[id];
+        const has_moved = self.has_moved.items[id];
 
-        const capture_moves_white = [_]Offset{
-            Offset.new(1, 1),
-            Offset.new(-1, 1),
-        };
+        var mask: MoveMask = 0;
 
-        const capture_moves_black = [_]Offset{
-            Offset.new(-1, -1),
-            Offset.new(1, -1),
-        };
+        const factor: i32 = if (colour == .white) 1 else -1;
 
-        var can_capture: u8 = 0;
-
-        const moves = if (colour == .white) capture_moves_white else capture_moves_black;
-        for (0.., moves) |index, move| {
-            const maybePos = pawn_pos.moveBy(move);
-            if (maybePos) |pos| {
-                if (self.getPieceIdAt(pos.toIndex())) |other_id| {
-                    if (self.colours.items[other_id] != colour) {
-                        can_capture |= @intCast(index + 1);
+        if (pos.isValidOffset(0, 1 * factor)) |index1| {
+            if (self.hasPieceAt(index1) == false) {
+                mask |= setNth(index1);
+                // pawns can't jump
+                if (has_moved == false) {
+                    if (pos.isValidOffset(0, 2 * factor)) |index2| {
+                        if (self.hasPieceAt(index2) == false) {
+                            mask |= setNth(index2);
+                        }
                     }
                 }
             }
         }
 
-        return switch (can_capture) {
-            0b01 => .left,
-            0b10 => .right,
-            0b11 => .both,
-            else => .no,
+        const capture_moves = [_]Offset{
+            Offset.new(1, 1 * factor),
+            Offset.new(-1, 1 * factor),
         };
-    }
 
-    fn validMove(self: *Self, id: usize, move: Offset) bool {
-        // if there is a piece that has a different colour or if there is no piece
-        if (move.x == 0 and move.y == 0) {
-            return false;
-        }
-
-        const current_pos = self.positions.items[id];
-        const new_pos = current_pos.moveBy(move);
-        if (new_pos == null) {
-            return false;
-        }
-
-        const index = new_pos.?.toIndex();
-        if (self.hasPieceAt(index) == false) {
-            return true;
-        }
-
-        const colour = self.colours.items[id];
-        if (self.getPieceIdAt(index)) |piece_id| {
-            const piece_colour = self.colours.items[piece_id];
-            if (colour != piece_colour and piece_id != id) {
-                return true;
+        for (capture_moves) |move| {
+            if (pos.isValidOffset(move.x, move.y)) |index| {
+                if (self.isOccupied(index, colour) == .enemy) {
+                    mask |= setNth(index);
+                }
             }
         }
 
-        return false;
+        return mask;
     }
 
-    pub fn getPossibleMoves(self: *Self, id: usize) []const Offset {
-        const piece = self.pieces.items[id];
+    fn getKnightMoves(self: *const Self, id: usize) MoveMask {
+        const pos = self.positions.items[id];
+        const colour = self.colours.items[id];
 
-        switch (piece) {
-            .pawn => {
-                return switch (self.canPawnCapture(id)) {
-                    .left => &pawn_moves_capture_left,
-                    .right => &pawn_moves_capture_right,
-                    .both => &pawn_moves_capture_both,
-                    .no => switch (self.pawnMoveDistance(id)) {
-                        0 => &.{},
-                        1 => &pawn_moves,
-                        2 => &pawn_moves_not_yet_moved,
-                        else => unreachable,
-                    },
-                };
-            },
-            .knight => { return &knight_moves; },
-            .bishop => { return &bishop_mold; },
-            .rook => { return &rook_mold; },
-            .queen => { return &queen_mold; },
-            .king => { return &king_moves; },
+        const knight_moves = [_]Offset{
+            Offset.new(2, 1),
+            Offset.new(-2, 1),
+            Offset.new(1, 2),
+            Offset.new(-1, 2),
+            Offset.new(2, -1),
+            Offset.new(1, -2),
+            Offset.new(1, -2),
+            Offset.new(-1, -2),
+        };
+
+        var mask: MoveMask = 0;
+
+        for (knight_moves) |move| {
+            if (pos.isValidOffset(move.x, move.y)) |index| {
+                if (self.isOccupied(index, colour) == .enemy or self.hasPieceAt(index) == false) {
+                    mask |= setNth(index);
+                }
+            }
         }
+
+        return mask;
+    }
+
+    fn getBishopMoves(self: *const Self, id: usize) MoveMask {
+        const bishop_mould = [_]Offset{
+            Offset.new(1, 1),
+            Offset.new(-1, 1),
+            Offset.new(-1, -1),
+            Offset.new(1, -1),
+        };
+
+        return self.growFromMould(id, &bishop_mould, 4);
+    }
+
+    fn getRookMoves(self: *const Self, id: usize) MoveMask {
+        const rook_mould = [_]Offset{
+            Offset.new(0, 1),
+            Offset.new(-1, 0),
+            Offset.new(0, -1),
+            Offset.new(1, 0),
+        };
+
+        return self.growFromMould(id, &rook_mould, 4);
+    }
+
+    fn getQueenMoves(self: *const Self, id: usize) MoveMask {
+        const queen_mould = [_]Offset{
+            Offset.new(1, 0),
+            Offset.new(-1, 0),
+            Offset.new(0, 1),
+            Offset.new(0, -1),
+
+            Offset.new(1, 1),
+            Offset.new(-1, 1),
+            Offset.new(-1, -1),
+            Offset.new(1, -1),
+        };
+
+        return self.growFromMould(id, &queen_mould, 8);
+    }
+
+    fn getKingMoves(self: *Self, id: usize) MoveMask {
+        const pos = self.positions.items[id];
+        const colour = self.colours.items[id];
+
+        const king_moves = [_]Offset{
+            Offset.new(1, 0),
+            Offset.new(-1, 0),
+            Offset.new(0, 1),
+            Offset.new(0, -1),
+
+            Offset.new(1, 1),
+            Offset.new(-1, 1),
+            Offset.new(-1, -1),
+            Offset.new(1, -1),
+        };
+
+        var mask: MoveMask = 0;
+
+        for (king_moves) |move| {
+            if (pos.isValidOffset(move.x, move.y)) |index| {
+                if (self.isOccupied(index, colour) == .enemy or self.hasPieceAt(index) == false) {
+                    mask |= setNth(index);
+                }
+            }
+        }
+
+        self.castling = self.canCastle(id);
+        mask |= self.castling;
+
+        return mask;
     }
 
     pub fn highlightMoves(self: *Self, id: usize) void {
         const piece = self.pieces.items[id];
-        const pos = self.positions.items[id];
-        const colour = self.colours.items[id];
         const alive = self.alive.items[id];
 
         if (alive == false) { // the dead don't move
             return;
         }
 
-        switch (piece) {
-            .pawn, .king, .knight => {
-                const moves = self.getPossibleMoves(id);
-                for (moves) |move| {
-                    var m = move;
-                    if (piece == .pawn and colour == .black) {
-                        m = m.scale(-1);
-                    }
-                    if (self.validMove(id, m)) {
-                        const index = pos.moveBy(m).?.toIndex();
-                        self.highlightTile(index);
-                    }
+        const move_mask = switch (piece) {
+            .pawn => self.getPawnMoves(id),
+            .knight => self.getKnightMoves(id), // there is a Bob Seger joke here somewhere, I just can't find it
+            .bishop => self.getBishopMoves(id),
+            .rook => self.getRookMoves(id),
+            .queen => self.getQueenMoves(id),
+            .king => self.getKingMoves(id),
+        };
+
+        self.highlighted |= move_mask;
+    }
+
+    fn firstSeenPiece(self: *const Self, id: usize, dir: Offset) ?usize {
+        const pos = self.positions.items[id];
+        for (0..7) |d| {
+            const move = dir.scale(@intCast(d + 1));
+            if (pos.isValidOffset(move.x, move.y)) |index| {
+                if (self.hasPieceAt(index)) {
+                    return self.getPieceIdAt(index);
                 }
-            },
-            .bishop, .queen, .rook => {
-                // :D
-                const mold = self.getPossibleMoves(id);
-                // const n = if (piece == .queen) 8 else 4;
-                var mask: [8]bool = .{ false } ** 8;
-                var em: [8]bool = .{ false } ** 8;
-                for (0..7) |d| {
-                    for (0..if (piece == .queen) 8 else 4) |r| {
-                        if (mask[r] == false and em[r] == false) {
-                            const move = mold[r].scale(@intCast(d + 1));
-                            if (self.validMove(id, move)) {
-                                const index = pos.moveBy(move).?.toIndex();
-                                if (self.hasPieceAt(index)) {
-                                    em[r] = true;
-                                }
-                                self.highlightTile(index);
-                            } else {
-                                mask[r] = true;
-                            }
-                        }
-                    }
-                }
-            },
+            }
         }
+        return null;
+    }
+
+    fn canCastle(self: *const Self, id: usize) MoveMask {
+        const pos = self.positions.items[id];
+        const has_moved = self.has_moved.items[id];
+        const colour = self.colours.items[id];
+
+        if (has_moved == true) {
+            return 0;
+        }
+
+        var mask: MoveMask = 0;
+
+        const queenside_piece_id = self.firstSeenPiece(id, Offset.new(1, 0));
+        const kingside_piece_id = self.firstSeenPiece(id, Offset.new(-1, 0));
+
+        if (queenside_piece_id) |qid| {
+            const qs = self.has_moved.items[qid] == false and self.colours.items[qid] == colour and self.pieces.items[qid] == .rook;
+            if (qs) {
+                if (pos.isValidOffset(2, 0)) |index| {
+                    mask |= setNth(index);
+                }
+            }
+
+        }
+
+        if (kingside_piece_id) |kid| {
+            const ks = self.has_moved.items[kid] == false and self.colours.items[kid] == colour and self.pieces.items[kid] == .rook;
+            if (ks) {
+                if (pos.isValidOffset(-2, 0)) |index| {
+                    mask |= setNth(index);
+                }
+            }
+        }
+
+        return mask;
+    }
+
+    fn growFromMould(self: *const Self, id: usize, mould: []const Offset, comptime R: usize) MoveMask {
+        var move_mask: u64 = 0;
+        const pos = self.positions.items[id];
+        const colour = self.colours.items[id];
+
+        var mask: [R]bool = .{ false } ** R;
+        var em: [R]bool = .{ false } ** R;
+        for (0..7) |d| {
+            for (0..R) |r| {
+                if (mask[r] == false and em[r] == false) {
+                    const move = mould[r].scale(@intCast(d + 1));
+                    if (pos.isValidOffset(move.x, move.y)) |index| {
+                        switch (self.isOccupied(index, colour)) {
+                            .enemy => {
+                                em[r] = true;
+                            },
+                            .friend => {
+                                mask[r] = true;
+                                continue;
+                            },
+                            .no => {},
+                        }
+                        move_mask |= setNth(index);
+                    } else {
+                        mask[r] = true;
+                    }
+                }
+            }
+        }
+        return move_mask;
+    }
+
+    fn pieceAtIndexIsUnmovedRook(self: *const Self, index: usize) bool {
+        if (getPieceIdAt(index)) |id| {
+            const piece = self.pieces.items[id];
+            const has_moved = self.has_moved.items[id];
+            return piece == .rook and has_moved == false;
+        }
+        return false;
     }
 
     fn addPiece(self: *Self, colour: Colour, row: usize, col: usize, piece: Piece) !void {
@@ -343,6 +380,36 @@ pub const Board = struct {
         try self.position_lookup.put(index, id);
     }
 
+    pub fn castle(self: *Self, king_id: usize, index: usize) void {
+        const Side = enum { kingside, queenside };
+        const colour = self.colours.items[king_id];
+        const king_pos = self.positions.items[king_id];
+
+        const side: Side = if (Position.fromIndex(index).row == 1) .kingside else .queenside;
+
+        const y = if (colour == .white) @as(usize, 0) else @as(usize, 7);
+        const rook_pos = if (side == .queenside) Position.new(7, y) else Position.new(0, y);
+        const rook_id = self.position_lookup.get(rook_pos.toIndex()).?;
+        const rook_offset = if (side == .queenside) @as(i32, -3) else @as(i32, 2);
+        const king_offset = if (side == .queenside) @as(i32, 2) else @as(i32, -2);
+
+        const new_king_pos = king_pos.offsetBy(king_offset, 0);
+        const new_rook_pos = rook_pos.offsetBy(rook_offset, 0);
+
+        // kind of painful
+        self.has_moved.items[king_id] = true;
+        self.has_moved.items[rook_id] = true;
+        self.positions.items[king_id] = Position.fromIndex(new_king_pos);
+        self.positions.items[rook_id] = Position.fromIndex(new_rook_pos);
+        _ = self.position_lookup.remove(king_pos.toIndex());
+        _ = self.position_lookup.remove(rook_pos.toIndex());
+        self.position_lookup.put(new_king_pos, king_id) catch unreachable;
+        self.position_lookup.put(new_rook_pos, rook_id) catch unreachable;
+
+        self.turn_number += 1;
+        self.turn = if (self.turn == .white) .black else .white;
+    }
+
     pub fn movePiece(self: *Self, old_pos: Position, target_index: usize) void {
         const new_pos = Position.fromIndex(target_index);
         if (new_pos.eq(old_pos)) {
@@ -350,7 +417,6 @@ pub const Board = struct {
             self.clearHighlightedTiles();
             return;
         }
-        // due to how `validMove` is written, this can only be an enemy piece (or the piece itself)
         const maybeId = self.position_lookup.get(old_pos.toIndex());
         if (maybeId) |id| {
             if (self.colours.items[id] == self.turn) {
@@ -366,8 +432,6 @@ pub const Board = struct {
 
                 self.turn_number += 1;
                 self.turn = if (self.turn == .white) .black else .white;
-
-                print("`{s}` moved, `{s}` to play\n", .{ self.pieces.items[id].toString(), if (self.turn == .white) "white" else "black" });
             }
         }
         self.unselectPiece();
@@ -375,18 +439,17 @@ pub const Board = struct {
     }
 
     pub inline fn isHighlighted(self: *const Self, index: usize) bool {
-        return self.highlighted[index] == 1;
-    }
-
-    pub inline fn highlightTile(self: *Self, index: usize) void {
-        self.highlighted[index] = 1;
+        return (self.highlighted >> @intCast(index)) & 1 == 1;
     }
 
     pub inline fn clearHighlightedTiles(self: *Self) void {
-        for (self.highlighted) |*h| {
-            h.* = 0;
-        }
+        self.highlighted = 0;
+        self.castling = 0;
         self.selected_piece_id = null;
+    }
+
+    pub inline fn isCastling(self: *Self, index: usize) bool {
+        return (self.castling >> @intCast(index)) & 1 == 1;
     }
 
     pub inline fn selectPiece(self: *Self, id: usize) void {
@@ -414,10 +477,6 @@ pub const Board = struct {
     }
 
     pub fn init(allocator: std.mem.Allocator) !Board {
-        const highlightMask = try allocator.alloc(i32, Self.width * Self.height);
-        for (highlightMask) |*h| {
-            h.* = 0;
-        }
         var board = Board{
             .positions = std.ArrayList(Position).init(allocator),
             .pieces = std.ArrayList(Piece).init(allocator),
@@ -425,7 +484,8 @@ pub const Board = struct {
             .alive = std.ArrayList(bool).init(allocator),
             .has_moved = std.ArrayList(bool).init(allocator),
             .position_lookup = std.AutoHashMap(usize, usize).init(allocator),
-            .highlighted = highlightMask,
+            .highlighted = 0,
+            .castling = 0,
             .selected_piece_id = null,
             .turn_number = 1,
             .turn = .white,

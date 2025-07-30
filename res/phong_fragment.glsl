@@ -22,7 +22,7 @@ in vec3 pos;
 in vec3 normal;
 
 in float isWhite;
-in float highlight;
+in float isHighlighted;
 
 in vec4 posLightSpace;
 
@@ -57,7 +57,7 @@ void main() {
     vec3 spec = isWhite == 1.0 ? whiteSpecular : blackSpecular;
     float s = isWhite == 1.0 ? whiteShininess : blackShininess;
 
-    vec3 c = mix(amb, selectionColour, highlight);
+    vec3 c = mix(amb, selectionColour, isHighlighted);
 
     vec3 ambient = amb * c;
     vec3 diffuse = (diff * c) * max(0.0, dot(l, n));
