@@ -10,12 +10,11 @@ Current To-Do:
 - Castling
 - Check and resolving check
 - Pawn promotion
-- Shadows
 - FEN loading
 - Subtle movement animations for the pieces
 
 <p align="center">
-    <img src="https://github.com/user-attachments/assets/c8c57631-11cc-402b-b319-37991226338c" width=300 height=300 alt="Preview Image" />
+    <img src="https://github.com/user-attachments/assets/994a00d8-7f07-44a8-86a2-5e7ac609e869" width=300 height=300 alt="Preview Image" />
 </p>
 
 <br>
