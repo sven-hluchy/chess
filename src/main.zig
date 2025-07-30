@@ -9,7 +9,6 @@ const Mat4 = za.Mat4;
 
 const c = @cImport({
     @cInclude("SDL3/SDL.h");
-    @cInclude("SDL3_ttf/SDL_ttf.h");
 });
 
 const event = @import("event.zig");
@@ -66,14 +65,8 @@ pub fn main() !void {
     }
     defer c.SDL_Quit();
 
-    if (c.TTF_Init() == false) {
-        print("[Error] TTF_Init: {s}\n", .{c.SDL_GetError()});
-    }
-    defer c.TTF_Quit();
-
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLEBUFFERS, 1);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLESAMPLES, 8);
-
 
     const window = c.SDL_CreateWindow("title", 800, 600, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE);
     if (window == null) {
