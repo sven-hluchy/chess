@@ -14,6 +14,7 @@ const c = @cImport({
 
 const event = @import("event.zig");
 const assets = @import("assets.zig");
+const util = @import("util.zig");
 
 const Mesh = @import("mesh.zig").Mesh;
 const Board = @import("board.zig").Board;
@@ -103,7 +104,7 @@ pub fn main() !void {
 
     const shadow_program = try assets.loadProgram("res/shadow_vertex.glsl", "res/shadow_fragment.glsl");
 
-    const light_pos = Vec3.new(0.0, 6.0, -1.0);
+    const light_pos = Vec3.new(3.0, 7.0, -2.0);
     const light_ortho = za.orthographic(-10, 10, -10, 10, 1, 20.0);
     const light_view_matrix = za.lookAt(light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
 
@@ -152,7 +153,9 @@ pub fn main() !void {
 
     var input_events = event.InputEventBuffer.init(allocator);
 
-    var view_matrix = za.lookAt(Vec3.new(0, 8, -8), Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
+    // radius, yaw, pitch
+    var camera_orientation = Vec3.new(10.0, std.math.pi, 1.012);
+    var view_matrix = util.rebuildViewMatrix(camera_orientation);
 
     debug.use();
     setUniform1i(debug, "depthMap", 0);
@@ -228,7 +231,7 @@ pub fn main() !void {
             const projection_matrix = za.perspective(70.0, aspect_ratio, 0.1, 1000.0);
             setUniformMat4f(program, "projectionMatrix", projection_matrix);
 
-            input_events.update(&view_matrix, &projection_matrix, &board);
+            input_events.update(&view_matrix, &projection_matrix, &board, &camera_orientation);
             setUniformMat4f(program, "viewMatrix", view_matrix);
 
             gl.uniform1iv(program.uniformLocation("highlighted"), board.highlighted);

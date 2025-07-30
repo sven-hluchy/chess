@@ -81,7 +81,8 @@ pub const InputEventBuffer = struct {
         return @as(f32, @floatFromInt(self.window_width)) / @as(f32, @floatFromInt(self.window_height));
     }
 
-    pub fn update(self: *Self, view_matrix: *za.Mat4, projection_matrix: *const za.Mat4, board: *Board) void {
+
+    pub fn update(self: *Self, view_matrix: *za.Mat4, projection_matrix: *const za.Mat4, board: *Board, camera_orientation: *Vec3) void {
         for (self.mouse_down.items) |mouse| {
             self.mouse_button_state[@intFromEnum(mouse.button)] = mouse.state;
 
@@ -132,7 +133,14 @@ pub const InputEventBuffer = struct {
 
         for (self.mouse_motion.items) |motion| {
             if (self.mouse_button_state[0] == .down) {
-                view_matrix.* = view_matrix.rotate(motion.xrel, za.Vec3.new(0, 1, 0));
+                const max_pitch = za.toRadians(@as(f32, 80.0));
+                const sens = za.toRadians(@as(f32, 0.1));
+                const od = &camera_orientation.data;
+
+                od[1] -= motion.xrel * sens;
+                od[2] = util.clampf(od[2] + motion.yrel * sens, -max_pitch, max_pitch);
+
+                view_matrix.* = util.rebuildViewMatrix(camera_orientation.*);
             }
         }
     }

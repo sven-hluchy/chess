@@ -1,14 +1,14 @@
 #version 400
 
-uniform vec3 whiteAmbient = vec3(0.5, 0.45, 0.3);
-uniform vec3 whiteDiffuse = vec3(0.8, 0.7, 0.5);
+uniform vec3 whiteAmbient = vec3(0.5);
+uniform vec3 whiteDiffuse = vec3(0.8);
 uniform vec3 whiteSpecular = vec3(0.2);
-uniform float whiteShininess = 16.0;
+uniform float whiteShininess = 64.0;
 
-uniform vec3 blackAmbient = vec3(0.35, 0.3, 0.2);
-uniform vec3 blackDiffuse = vec3(0.4, 0.25, 0.15);
+uniform vec3 blackAmbient = vec3(0.35);
+uniform vec3 blackDiffuse = vec3(0.4);
 uniform vec3 blackSpecular = vec3(0.1);
-uniform float blackShininess = 8.0;
+uniform float blackShininess = 64.0;
 
 uniform vec3 selectionColour;
 
