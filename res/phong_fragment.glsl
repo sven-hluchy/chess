@@ -1,16 +1,16 @@
 #version 400
 
-uniform vec3 whiteAmbient = vec3(0.5);
-uniform vec3 whiteDiffuse = vec3(0.8);
-uniform vec3 whiteSpecular = vec3(0.2);
-uniform float whiteShininess = 64.0;
+float whiteAmbient = 0.5;
+float whiteDiffuse = 0.8;
+float whiteSpecular = 0.2;
+float whiteShininess = 64.0;
 
-uniform vec3 blackAmbient = vec3(0.35);
-uniform vec3 blackDiffuse = vec3(0.4);
-uniform vec3 blackSpecular = vec3(0.1);
-uniform float blackShininess = 64.0;
+float blackAmbient = 0.35;
+float blackDiffuse = 0.4;
+float blackSpecular = 0.1;
+float blackShininess = 64.0;
 
-uniform vec3 selectionColour = vec3(19.0 / 255.0, 196.0 / 255.0, 163.0 / 255.0);
+vec3 selectionColour = vec3(19.0 / 255.0, 196.0 / 255.0, 163.0 / 255.0);
 
 uniform vec3 uLightPos;
 
@@ -21,8 +21,8 @@ out vec4 outColour;
 in vec3 pos;
 in vec3 normal;
 
-in float isWhite;
-in float isHighlighted;
+flat in int isWhite;
+flat in int isHighlighted;
 
 in vec4 posLightSpace;
 
@@ -52,16 +52,16 @@ void main() {
 
     shadow /= 18.0;
 
-    vec3 amb = isWhite == 1.0 ? whiteAmbient : blackAmbient;
-    vec3 diff = isWhite == 1.0 ? whiteDiffuse : blackDiffuse;
-    vec3 spec = isWhite == 1.0 ? whiteSpecular : blackSpecular;
+    float amb = isWhite == 1 ? whiteAmbient : blackAmbient;
+    float diff = isWhite == 1.0 ? whiteDiffuse : blackDiffuse;
+    float spec = isWhite == 1.0 ? whiteSpecular : blackSpecular;
     float s = isWhite == 1.0 ? whiteShininess : blackShininess;
 
-    vec3 c = mix(amb, selectionColour, isHighlighted);
+    vec3 c = mix(vec3(amb), selectionColour, isHighlighted);
 
     vec3 ambient = amb * c;
     vec3 diffuse = (diff * c) * max(0.0, dot(l, n));
-    vec3 specular = spec * pow(max(0.0, dot(v, r)), s);
+    vec3 specular = spec * vec3(1) * pow(max(0.0, dot(v, r)), s);
 
     vec3 light = (ambient + (1 - shadow) * (diffuse + specular)) * vec3(1);
 

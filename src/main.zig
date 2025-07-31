@@ -54,6 +54,9 @@ pub fn main() !void {
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLEBUFFERS, 1);
     _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLESAMPLES, 8);
 
+    // _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    // _ = c.SDL_GL_SetAttribute(c.SDL_GL_CONTEXT_MINOR_VERSION, 0);
+
     const window = c.SDL_CreateWindow("title", 800, 600, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE);
     if (window == null) {
         print("[Error] SDL_CreateWindow: {s}\n", .{c.SDL_GetError()});
@@ -68,6 +71,9 @@ pub fn main() !void {
 
     try gl.loadExtensions(ctx, getProcAddress);
 
+    _ = c.SDL_GL_MakeCurrent(window, ctx);
+    gl.viewport(0, 0, 800, 600);
+
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
@@ -77,7 +83,7 @@ pub fn main() !void {
     defer mesh_data.deinit();
 
     gl.enable(.depth_test);
-    gl.enable(.blend);
+    // gl.enable(.blend);
     gl.enable(.multisample);
     gl.cullFace(.back);
 
@@ -115,12 +121,22 @@ pub fn main() !void {
         print(":(\n", .{});
     }
 
-    var board = try Board.init(allocator);
-    var program = try assets.loadProgram("res/phong_vertex.glsl", "res/phong_fragment.glsl");
-    var debug = try assets.loadProgram("res/debug_vs.glsl", "res/debug_fs.glsl");
+    // var debug = try assets.loadProgram("res/debug_vs.glsl", "res/debug_fs.glsl");
+    // debug.use();
+    // setUniform1i(debug, "shadowMap", 0);
 
+    var board = try Board.init(allocator);
+    var input_events = event.InputEventBuffer.init(allocator);
+    var camera_orientation = Vec3.new(10.0, std.math.pi, 1);    // radius, yaw, pitch
+    var view_matrix = util.rebuildViewMatrix(camera_orientation);
+
+    var program = try assets.loadProgram("res/phong_vertex.glsl", "res/phong_fragment.glsl");
+    program.use();
     setUniformMat4f(program, "lightProjMatrix", light_ortho);
     setUniformMat4f(program, "lightViewMatrix", light_view_matrix);
+    setUniform3f(program, "uLightPos", light_pos);
+    setUniformMat4f(program, "viewMatrix", view_matrix);
+    setUniform1i(program, "shadowMap", 0);
 
     try mesh_data.add(.pawn, "res/pawn.obj");
     try mesh_data.add(.knight, "res/knight.obj");
@@ -129,21 +145,6 @@ pub fn main() !void {
     try mesh_data.add(.queen, "res/queen.obj");
     try mesh_data.add(.king, "res/king.obj");
     try mesh_data.add(.tile, "res/tile.obj");
-
-    var input_events = event.InputEventBuffer.init(allocator);
-
-    // radius, yaw, pitch
-    var camera_orientation = Vec3.new(10.0, std.math.pi, 1.012);
-    var view_matrix = util.rebuildViewMatrix(camera_orientation);
-
-    debug.use();
-    setUniform1i(debug, "depthMap", 0);
-
-    program.use();
-    setUniform3f(program, "uLightPos", light_pos);
-
-    setUniformMat4f(program, "viewMatrix", view_matrix);
-    setUniform1i(program, "shadowMap", 0);
 
     {
         loop: while (true) {
@@ -156,6 +157,7 @@ pub fn main() !void {
                             .width = @intCast(e.window.data1),
                             .height = @intCast(e.window.data2),
                         });
+                        gl.viewport(0, 0, @intCast(e.window.data1), @intCast(e.window.data2));
                     },
                     c.SDL_EVENT_MOUSE_BUTTON_DOWN, c.SDL_EVENT_MOUSE_BUTTON_UP => {
                         if (e.button.button == c.SDL_BUTTON_LEFT or e.button.button == c.SDL_BUTTON_RIGHT) {
@@ -196,15 +198,12 @@ pub fn main() !void {
             input_events.update(&view_matrix, &projection_matrix, &board, &camera_orientation);
             setUniformMat4f(program, "viewMatrix", view_matrix);
 
-            gl.uniform2ui(
-                program.uniformLocation("highlighted"),
-                @intCast(board.highlighted & 0xffff_ffff),
-                @intCast(board.highlighted >> 32));
+            gl.uniform2ui(program.uniformLocation("highlighted"), @intCast(board.highlighted & 0xffff_ffff), @intCast(board.highlighted >> 32));
 
             const model_matrix = Mat4.fromTranslate(Vec3.new(-3.5, 0, -3.5));
             const tile_vao = mesh_data.getVao(.tile);
             const tile_vertex_count = mesh_data.getCount(.tile);
-            
+
             // render into shadow map
             gl.bindFramebuffer(shadow_fbo, .buffer);
 
@@ -232,7 +231,7 @@ pub fn main() !void {
             gl.viewport(0, 0, input_events.window_width, input_events.window_height);
             gl.cullFace(.back);
             gl.clearColor(0.3, 0.3, 0.4, 1.0);
-            gl.clear(.{ .color = true, .depth = true});
+            gl.clear(.{ .color = true, .depth = true });
 
             gl.activeTexture(.texture_0);
             gl.bindTexture(depth_tex, .@"2d");
@@ -246,9 +245,9 @@ pub fn main() !void {
             gl.drawArraysInstanced(.triangles, 0, tile_vertex_count, Board.width * Board.height);
             setUniform1i(program, "renderingTiles", 0);
 
-            _ = c.SDL_GL_SwapWindow(window);
-
             input_events.clear();
+
+            _ = c.SDL_GL_SwapWindow(window);
             _ = c.SDL_Delay(16);
         }
     }

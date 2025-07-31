@@ -4,6 +4,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const target_os = target.result.os.tag;
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -16,6 +18,17 @@ pub fn build(b: *std.Build) void {
     });
     exe_mod.addImport("zgl", zgl.module("zgl"));
 
+    if (target_os == .windows) {
+        exe_mod.linkSystemLibrary("gdi32", .{});
+        exe_mod.linkSystemLibrary("opengl32", .{});
+        exe_mod.addLibraryPath(b.path("lib/"));
+        exe_mod.addIncludePath(b.path("lib/include"));
+        exe_mod.linkSystemLibrary("SDL3", .{});
+    } else if (target_os == .linux) {
+        exe_mod.linkSystemLibrary("SDL3", .{});
+        exe_mod.linkSystemLibrary("GL", .{});
+    }
+
     const zalg = b.dependency("zalgebra", .{
         .target = target,
         .optimize = optimize,
@@ -27,12 +40,12 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
-    exe.linkSystemLibrary("SDL3");
-    // exe.linkSystemLibrary("SDL3_ttf");
-    exe.linkSystemLibrary("GL");
     exe.linkLibC();
 
     b.installArtifact(exe);
+    if (target_os == .windows) {
+        b.installFile("lib/SDL3.dll", "bin/SDL3.dll");
+    }
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());

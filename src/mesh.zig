@@ -34,9 +34,10 @@ pub const Mesh = struct {
         var indices = std.ArrayList(usize).init(allocator);
 
         while (true) {
-            const line = reader.readUntilDelimiter(&buffer, '\n') catch |err| {
+            const l = reader.readUntilDelimiter(&buffer, '\n') catch |err| {
                 if (err == error.EndOfStream) break else return err;
             };
+            const line = std.mem.trim(u8, l, "\r");
 
             if (line[0] == '#' or line[0] == 'o') {
                 continue;

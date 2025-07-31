@@ -64,8 +64,8 @@ pub const InputEventBuffer = struct {
             .mouse_motion = std.ArrayList(MouseMotion).init(allocator),
             .mouse_button_state = mbs,
             .mouse_position = za.Vec2.new(0.0, 0.0),
-            .window_width = 0,
-            .window_height = 0,
+            .window_width = 800,
+            .window_height = 600,
             .window_resized = std.ArrayList(WindowResize).init(allocator),
         };
     }
@@ -80,7 +80,6 @@ pub const InputEventBuffer = struct {
     pub inline fn getAspectRatio(self: *const Self) f32 {
         return @as(f32, @floatFromInt(self.window_width)) / @as(f32, @floatFromInt(self.window_height));
     }
-
 
     pub fn update(self: *Self, view_matrix: *za.Mat4, projection_matrix: *const za.Mat4, board: *Board, camera_orientation: *Vec3) void {
         for (self.mouse_down.items) |mouse| {

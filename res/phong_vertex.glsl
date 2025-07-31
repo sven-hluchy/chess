@@ -20,8 +20,8 @@ in vec3 aNorm;
 out vec3 pos;
 out vec3 normal;
 
-out float isHighlighted;
-out float isWhite;
+flat out int isHighlighted;
+flat out int isWhite;
 
 out vec4 posLightSpace;
 
@@ -45,16 +45,16 @@ void main() {
     normal = normalize(normalMat * aNorm);
 
     isWhite = renderingTiles == 0
-        ? white
+        ? int(white)
         : (row + col) % 2 == 0
-            ? 1.0
-            : 0.0;
+            ? 1
+            : 0;
 
     isHighlighted = renderingTiles == 0
         ? 0
         : gl_InstanceID < 32
-            ? (highlighted.x >> uint(gl_InstanceID)) & 1u
-            : (highlighted.y >> uint(gl_InstanceID -32)) & 1u;
+            ? int((highlighted.x >> uint(gl_InstanceID)) & 1u)
+            : int((highlighted.y >> uint(gl_InstanceID -32)) & 1u);
 
     posLightSpace = renderingTiles == 0
         ? lightProjMatrix * lightViewMatrix * modelMatrix * vec4(aPos, 1.0)
