@@ -44,6 +44,7 @@ pub const InputEventBuffer = struct {
     key_down: std.ArrayList(u32),
     mouse_motion: std.ArrayList(MouseMotion),
     window_resized: std.ArrayList(WindowResize),
+    mouse_wheel: std.ArrayList(f32),
 
     mouse_button_state: []MouseButtonState,
     mouse_position: za.Vec2,
@@ -62,6 +63,7 @@ pub const InputEventBuffer = struct {
             .mouse_down = std.ArrayList(MousePress).init(allocator),
             .key_down = std.ArrayList(u32).init(allocator),
             .mouse_motion = std.ArrayList(MouseMotion).init(allocator),
+            .mouse_wheel = std.ArrayList(f32).init(allocator),
             .mouse_button_state = mbs,
             .mouse_position = za.Vec2.new(0.0, 0.0),
             .window_width = 800,
@@ -75,6 +77,7 @@ pub const InputEventBuffer = struct {
         self.key_down.clearAndFree();
         self.mouse_motion.clearAndFree();
         self.window_resized.clearAndFree();
+        self.mouse_wheel.clearAndFree();
     }
 
     pub inline fn getAspectRatio(self: *const Self) f32 {
@@ -134,6 +137,13 @@ pub const InputEventBuffer = struct {
 
         for (self.key_down.items) |key| {
             print("key {} was pressed\n", .{key});
+        }
+
+        for (self.mouse_wheel.items) |y| {
+            const od = &camera_orientation.data;
+            od[0] = util.clampf(od[0] + y, 8, 20);
+
+            view_matrix.* = util.rebuildViewMatrix(camera_orientation.*);
         }
 
         for (self.mouse_motion.items) |motion| {

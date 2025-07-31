@@ -83,7 +83,6 @@ pub fn main() !void {
     defer mesh_data.deinit();
 
     gl.enable(.depth_test);
-    // gl.enable(.blend);
     gl.enable(.multisample);
     gl.cullFace(.back);
 
@@ -186,6 +185,9 @@ pub fn main() !void {
                             .xrel = e.motion.xrel,
                             .yrel = e.motion.yrel,
                         });
+                    },
+                    c.SDL_EVENT_MOUSE_WHEEL => {
+                        try input_events.mouse_wheel.append(-e.wheel.y);
                     },
                     else => {},
                 }

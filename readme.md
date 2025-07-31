@@ -26,6 +26,7 @@ Should work fine on Linux as long as you have SDL3 and OpenGL installed.
 
 - Windows
     - Download SDL3-devel (e.g. from https://github.com/libsdl-org/SDL/releases) and unpack it
+    - Create `lib` folder
     - Copy the SDL3's `include` folder, `libSDL3.dll.a`, and `SDL3.dll` into the `lib` folder of this project
     - `zig build run`
 
