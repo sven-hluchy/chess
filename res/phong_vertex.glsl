@@ -50,9 +50,11 @@ void main() {
             ? 1.0
             : 0.0;
 
-    isHighlighted = renderingTiles == 1 && gl_InstanceID < 32
-        ? (highlighted.x >> uint(gl_InstanceID)) & 1u
-        : (highlighted.y >> uint(gl_InstanceID -32)) & 1u;
+    isHighlighted = renderingTiles == 0
+        ? 0
+        : gl_InstanceID < 32
+            ? (highlighted.x >> uint(gl_InstanceID)) & 1u
+            : (highlighted.y >> uint(gl_InstanceID -32)) & 1u;
 
     posLightSpace = renderingTiles == 0
         ? lightProjMatrix * lightViewMatrix * modelMatrix * vec4(aPos, 1.0)
