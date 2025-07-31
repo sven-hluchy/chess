@@ -10,7 +10,7 @@ uniform vec3 blackDiffuse = vec3(0.4);
 uniform vec3 blackSpecular = vec3(0.1);
 uniform float blackShininess = 64.0;
 
-uniform vec3 selectionColour;
+uniform vec3 selectionColour = vec3(19.0 / 255.0, 196.0 / 255.0, 163.0 / 255.0);
 
 uniform vec3 uLightPos;
 

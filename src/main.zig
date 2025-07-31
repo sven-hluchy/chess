@@ -45,20 +45,6 @@ fn vec3Colour(red: u8, green: u8, blue: u8) Vec3 {
     return Vec3.new(r / 255.0, g / 255.0, b / 255.0);
 }
 
-// const white_colour = vec3Colour(235, 217, 179);
-// const black_colour = vec3Colour(129, 84, 56);
-const selection_colour = vec3Colour(19, 196, 163);
-
-// const white_colour_ambient = Vec3.new(0.1, 0.4, 0.35);
-// const white_colour_diffuse = Vec3.new(0.95, 0.95, 0.85);
-// const white_colour_specular = Vec3.new(0.3, 0.3, 0.3);
-// const white_colour_shininess = 30.0;
-// 
-// const black_colour_ambient = Vec3.new(0.2, 0.4, 0.2);
-// const black_colour_diffuse = Vec3.new(0.0, 0.5, 0.25);
-// const black_colour_specular = Vec3.new(0.3, 0.8, 0.6);
-// const black_colour_shininess = 76.8;
-
 pub fn main() !void {
     if (c.SDL_Init(c.SDL_INIT_VIDEO) == false) {
         print("[Error] SDL_Init: {s}\n", .{c.SDL_GetError()});
@@ -155,26 +141,9 @@ pub fn main() !void {
 
     program.use();
     setUniform3f(program, "uLightPos", light_pos);
-    
-    // set directly in shader
-    // setUniform3f(program, "whiteAmbient", white_colour_ambient);
-    // setUniform3f(program, "whiteDiffuse", white_colour_diffuse);
-    // setUniform3f(program, "whiteSpecular", white_colour_specular);
-    // setUniform1f(program, "whiteShininess", white_colour_shininess);
-
-    // setUniform3f(program, "blackAmbient", black_colour_ambient);
-    // setUniform3f(program, "blackDiffuse", black_colour_diffuse);
-    // setUniform3f(program, "blackSpecular", black_colour_specular);
-    // setUniform1f(program, "blackShininess", black_colour_shininess);
-
-    setUniform3f(program, "selectionColour", selection_colour);
-    setUniform3f(program, "uLightPos", light_pos);
 
     setUniformMat4f(program, "viewMatrix", view_matrix);
     setUniform1i(program, "shadowMap", 0);
-
-    const quadVao = getQuadVao();
-    print("{any}\n", .{ quadVao });
 
     {
         loop: while (true) {
@@ -227,9 +196,10 @@ pub fn main() !void {
             input_events.update(&view_matrix, &projection_matrix, &board, &camera_orientation);
             setUniformMat4f(program, "viewMatrix", view_matrix);
 
-            //gl.uniform1iv( board.highlighted);
-
-            gl.uniform2ui(program.uniformLocation("highlighted"), @intCast(board.highlighted & 0xffff_ffff), @intCast(board.highlighted >> 32));
+            gl.uniform2ui(
+                program.uniformLocation("highlighted"),
+                @intCast(board.highlighted & 0xffff_ffff),
+                @intCast(board.highlighted >> 32));
 
             const model_matrix = Mat4.fromTranslate(Vec3.new(-3.5, 0, -3.5));
             const tile_vao = mesh_data.getVao(.tile);

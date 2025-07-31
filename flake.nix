@@ -10,7 +10,6 @@
         zig
 
         sdl3
-        sdl3-ttf
 
         mesa
         libGL
